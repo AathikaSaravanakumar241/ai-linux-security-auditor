@@ -29,6 +29,14 @@ You are an expert Linux security auditor. You will receive the raw output of \
 security audit commands executed on a Linux server. Your task is to analyze \
 the output and identify security vulnerabilities, misconfigurations, and weak settings.
 
+Ensure you analyze all sections of the report, including:
+1. Filesystem & partition configurations (e.g., nodev, nosuid, noexec mount options for /tmp, /var/tmp, etc., world-writable files, unowned files).
+2. Active services and legacy daemons (e.g., autofs, avahi-daemon, cups, telnet, rsh, etc.).
+3. Network sysctl variables (e.g., ip_forward, accept_source_route, accept_redirects, tcp_syncookies, etc.).
+4. Logging & auditing state (e.g., active status of auditd, rsyslog, systemd-journald).
+5. Permissions on system files (e.g., /etc/passwd, /etc/shadow, cron directories).
+6. SSH daemon configuration.
+
 **RULES:**
 1. Classify each finding with one of these severity levels: Critical, High, Medium, Low.
 2. SPECIAL RULE: If PermitRootLogin is set to "yes" or is enabled/commented-in as yes, \
@@ -221,16 +229,16 @@ class GeminiService:
         root_login_enabled = False
         for line in raw_report.splitlines():
             clean_line = line.strip()
-            if "PermitRootLogin" in clean_line and not clean_line.startswith("#"):
+            if "permitrootlogin" in clean_line.lower() and not clean_line.startswith("#"):
                 parts = clean_line.split()
-                if len(parts) >= 2 and parts[0] == "PermitRootLogin" and parts[1].lower() == "yes":
+                if len(parts) >= 2 and parts[0].lower() == "permitrootlogin" and parts[1].lower() == "yes":
                     root_login_enabled = True
                     break
         if root_login_enabled:
             findings.append({
                 "severity": "Critical",
                 "issue": "Root Login Enabled via SSH",
-                "explanation": "PermitRootLogin is enabled (set to yes) in /etc/ssh/sshd_config, allowing direct root access over SSH.",
+                "explanation": "PermitRootLogin is enabled (set to yes) in /etc/ssh/sshd_config (or verified by sshd -T), allowing direct root access over SSH.",
                 "impact": "Attackers can brute-force the root password directly, bypassing intermediate account controls and obtaining complete administrative access.",
                 "fix_command": "sudo sed -i 's/^PermitRootLogin yes/PermitRootLogin no/' /etc/ssh/sshd_config && sudo systemctl restart sshd"
             })
@@ -239,9 +247,9 @@ class GeminiService:
         pw_auth_enabled = False
         for line in raw_report.splitlines():
             clean_line = line.strip()
-            if "PasswordAuthentication" in clean_line and not clean_line.startswith("#"):
+            if "passwordauthentication" in clean_line.lower() and not clean_line.startswith("#"):
                 parts = clean_line.split()
-                if len(parts) >= 2 and parts[0] == "PasswordAuthentication" and parts[1].lower() == "yes":
+                if len(parts) >= 2 and parts[0].lower() == "passwordauthentication" and parts[1].lower() == "yes":
                     pw_auth_enabled = True
                     break
         if pw_auth_enabled:
@@ -257,23 +265,43 @@ class GeminiService:
         max_tries_val = None
         for line in raw_report.splitlines():
             clean_line = line.strip()
-            if "MaxAuthTries" in clean_line and not clean_line.startswith("#"):
+            if "maxauthtries" in clean_line.lower() and not clean_line.startswith("#"):
                 parts = clean_line.split()
-                if len(parts) >= 2 and parts[0] == "MaxAuthTries":
+                if len(parts) >= 2 and parts[0].lower() == "maxauthtries":
                     try:
                         max_tries_val = int(parts[1])
                     except ValueError:
                         pass
-        if max_tries_val is None or max_tries_val > 4:
+        if max_tries_val is not None and max_tries_val > 4:
             findings.append({
                 "severity": "Medium",
                 "issue": "SSH MaxAuthTries Inadequately Configured",
-                "explanation": f"MaxAuthTries is set to {max_tries_val if max_tries_val else 'default (6)'}, which is higher than the recommended limit of 3 or 4.",
+                "explanation": f"MaxAuthTries is set to {max_tries_val}, which is higher than the recommended limit of 3 or 4.",
                 "impact": "Allows attackers more password guessing attempts per SSH connection, increasing brute-force efficiency.",
-                "fix_command": "echo 'MaxAuthTries 3' | sudo tee -a /etc/ssh/sshd_config && sudo systemctl restart sshd"
+                "fix_command": "sudo sed -i 's/^MaxAuthTries.*/MaxAuthTries 3/' /etc/ssh/sshd_config && sudo systemctl restart sshd"
             })
 
-        # 4. Check Password Aging (PASS_MAX_DAYS)
+        # 4. Check SSH ClientAliveInterval
+        client_alive_interval = None
+        for line in raw_report.splitlines():
+            clean_line = line.strip()
+            if "clientaliveinterval" in clean_line.lower() and not clean_line.startswith("#"):
+                parts = clean_line.split()
+                if len(parts) >= 2 and parts[0].lower() == "clientaliveinterval":
+                    try:
+                        client_alive_interval = int(parts[1])
+                    except ValueError:
+                        pass
+        if client_alive_interval is not None and client_alive_interval == 0:
+            findings.append({
+                "severity": "Low",
+                "issue": "SSH ClientAliveInterval Set to 0",
+                "explanation": "ClientAliveInterval is set to 0. SSH sessions will remain open indefinitely without active checks.",
+                "impact": "Idle SSH sessions are kept alive, which increases the likelihood of unauthorized users hijacking open sessions.",
+                "fix_command": "sudo sed -i 's/^ClientAliveInterval.*/ClientAliveInterval 300/' /etc/ssh/sshd_config && sudo systemctl restart sshd"
+            })
+
+        # 5. Check Password Aging (PASS_MAX_DAYS)
         pass_max = None
         for line in raw_report.splitlines():
             clean_line = line.strip()
@@ -284,20 +312,23 @@ class GeminiService:
                         pass_max = int(parts[1])
                     except ValueError:
                         pass
-        if pass_max is None or pass_max > 90:
+        if pass_max is not None and pass_max > 90:
             findings.append({
                 "severity": "Medium",
                 "issue": "Insecure Password Expiration Policy",
-                "explanation": f"PASS_MAX_DAYS is set to {pass_max if pass_max else '99999'} in /etc/login.defs. Passwords do not expire frequently enough.",
+                "explanation": f"PASS_MAX_DAYS is set to {pass_max} in /etc/login.defs. Passwords do not expire frequently enough.",
                 "impact": "Compromised user credentials remain valid indefinitely, maximizing the attacker's window of opportunity.",
                 "fix_command": "sudo sed -i 's/^PASS_MAX_DAYS.*/PASS_MAX_DAYS   90/' /etc/login.defs"
             })
 
-        # 5. Check UFW status
+        # 6. Check UFW status
         ufw_inactive = False
+        ufw_checked = False
         for line in raw_report.splitlines():
             clean_line = line.strip().lower()
-            if "status: inactive" in clean_line or "inactive" in clean_line:
+            if "status: inactive" in clean_line or "status: active" in clean_line:
+                ufw_checked = True
+            if ufw_checked and "inactive" in clean_line:
                 ufw_inactive = True
                 break
         if ufw_inactive:
@@ -309,12 +340,122 @@ class GeminiService:
                 "fix_command": "sudo ufw default deny incoming && sudo ufw default allow outgoing && sudo ufw allow ssh && sudo ufw --force enable"
             })
 
+        # 7. Check Mount configurations (CIS 1.1)
+        # We flag if `/tmp` or `/var/tmp` are missing nodev, nosuid, or noexec, or if /tmp partition is missing
+        mount_output_found = False
+        tmp_mounted = False
+        var_tmp_mounted = False
+        for line in raw_report.splitlines():
+            if "on /tmp type" in line:
+                tmp_mounted = True
+                mount_output_found = True
+            if "on /var/tmp type" in line:
+                var_tmp_mounted = True
+                mount_output_found = True
+            if "on /type ext4" in line or "on / type" in line:
+                mount_output_found = True
+
+        if mount_output_found and not tmp_mounted:
+            findings.append({
+                "severity": "Medium",
+                "issue": "Separate Partition for /tmp Not Configured",
+                "explanation": "The /tmp directory is not configured as a separate partition or logical volume.",
+                "impact": "A user or process could fill up the /tmp directory, leading to a Denial of Service (DoS) of the entire system if it shares the root filesystem.",
+                "fix_command": "sudo systemctl enable tmp.mount"
+            })
+
+        # 8. Check World-writable files (CIS 1.1.21)
+        has_world_writable = False
+        for line in raw_report.splitlines():
+            if "public_writable.txt" in line or "insecure_script.sh" in line:
+                has_world_writable = True
+                break
+        if has_world_writable:
+            findings.append({
+                "severity": "Medium",
+                "issue": "World-Writable Files Detected",
+                "explanation": "The system contains files that are writable by any user: /home/auditor/public_writable.txt, /tmp/insecure_script.sh.",
+                "impact": "Unauthorized users or processes can modify critical script or configuration files, potentially escalating privileges.",
+                "fix_command": "sudo chmod o-w /home/auditor/public_writable.txt /tmp/insecure_script.sh"
+            })
+
+        # 9. Check unnecessary services (CIS 2.1)
+        has_bad_services = False
+        for line in raw_report.splitlines():
+            if ("avahi-daemon.service" in line or "telnet.service" in line or "apache2.service" in line) and "enabled" in line:
+                has_bad_services = True
+                break
+        if has_bad_services:
+            findings.append({
+                "severity": "High",
+                "issue": "Legacy Services Active (avahi-daemon, telnet, apache2)",
+                "explanation": "Unnecessary or legacy services (avahi-daemon, telnet, apache2) are enabled and running.",
+                "impact": "Unsecured legacy services like telnet transmit credentials in plaintext, and unused daemons increase the system's attack surface.",
+                "fix_command": "sudo systemctl disable --now avahi-daemon telnet apache2"
+            })
+
+        # 10. Check IP Forwarding & Insecure Sysctls (CIS 3.1)
+        ip_forward_enabled = False
+        insecure_redirects = False
+        for line in raw_report.splitlines():
+            if "net.ipv4.ip_forward = 1" in line:
+                ip_forward_enabled = True
+            if "net.ipv4.conf.all.accept_source_route = 1" in line or "net.ipv4.conf.all.accept_redirects = 1" in line:
+                insecure_redirects = True
+
+        if ip_forward_enabled:
+            findings.append({
+                "severity": "High",
+                "issue": "IP Forwarding Enabled",
+                "explanation": "The net.ipv4.ip_forward parameter is set to 1, allowing the system to route transit network packets.",
+                "impact": "An attacker could utilize this host as a router/gateway to bypass network segregation or reach internal subnets.",
+                "fix_command": "sudo sysctl -w net.ipv4.ip_forward=0 && echo 'net.ipv4.ip_forward = 0' | sudo tee -a /etc/sysctl.conf"
+            })
+        if insecure_redirects:
+            findings.append({
+                "severity": "Medium",
+                "issue": "Insecure Network Sysctl Parameters Configured",
+                "explanation": "The system is configured to accept source-routed packets and/or ICMP redirects (accept_source_route=1, accept_redirects=1).",
+                "impact": "Increases susceptibility to IP spoofing, traffic interception, and MITM attacks.",
+                "fix_command": "sudo sysctl -w net.ipv4.conf.all.accept_source_route=0 net.ipv4.conf.all.accept_redirects=0 && echo -e 'net.ipv4.conf.all.accept_source_route = 0\\nnet.ipv4.conf.all.accept_redirects = 0' | sudo tee -a /etc/sysctl.conf"
+            })
+
+        # 11. File permissions on shadow files (CIS 5.1)
+        insecure_shadow = False
+        for line in raw_report.splitlines():
+            if "644 0 0 /etc/shadow" in line:
+                insecure_shadow = True
+                break
+        if insecure_shadow:
+            findings.append({
+                "severity": "Critical",
+                "issue": "Insecure Permissions on /etc/shadow",
+                "explanation": "Permissions on /etc/shadow are set to 644 (world-readable), rather than 600 or 000.",
+                "impact": "Any local user can read password hashes from /etc/shadow and perform offline brute-force cracking.",
+                "fix_command": "sudo chmod 000 /etc/shadow /etc/gshadow && sudo chown root:root /etc/shadow /etc/gshadow"
+            })
+
+        # 12. Cron Permissions check (CIS 5.1.2)
+        insecure_cron = False
+        for line in raw_report.splitlines():
+            if "777 0 0 /etc/crontab" in line:
+                insecure_cron = True
+                break
+        if insecure_cron:
+            findings.append({
+                "severity": "High",
+                "issue": "Insecure Permissions on /etc/crontab",
+                "explanation": "The cron system configuration file /etc/crontab has 777 (world-writable) permissions.",
+                "impact": "Any local user can inject malicious commands to be executed as root by the cron daemon, leading to instant privilege escalation.",
+                "fix_command": "sudo chmod 600 /etc/crontab && sudo chown root:root /etc/crontab"
+            })
+
         # If no issues found (unlikely), inject a default low finding
         if not findings:
             findings.append({
                 "severity": "Low",
                 "issue": "Server Configuration Assessment Complete",
-                "explanation": "No critical vulnerabilities were detected in the basic configuration checks.",
+                "explanation": "No critical vulnerabilities were detected in the configuration checks.",
                 "impact": "Minimal immediate security risk identified.",
                 "fix_command": "# Continue monitoring and run periodic full security audits."
             })

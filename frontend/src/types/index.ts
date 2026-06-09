@@ -34,6 +34,13 @@ export interface AuditDetail {
   severity_breakdown: SeverityBreakdown;
 }
 
+export interface AuditRequest {
+  server_ip: string;
+  port: number;
+  username: string;
+  password?: string;
+}
+
 export interface ApiError {
   code: string;
   message: string;
