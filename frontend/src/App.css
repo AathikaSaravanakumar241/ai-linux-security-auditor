@@ -1,0 +1,28 @@
+/*
+ * App.css — App-level layout styles
+ *
+ * Component-specific styles should live in their own files or use
+ * Tailwind utility classes inline. This file only contains global
+ * layout scaffolding.
+ */
+
+/* ---- App Shell Layout ---- */
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+}
+
+.app-main {
+  flex: 1;
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 1.5rem;
+}
+
+@media (min-width: 768px) {
+  .app-main {
+    padding: 2rem;
+  }
+}

@@ -1,0 +1,30 @@
+services:
+
+  postgres:
+    image: postgres:17
+
+    container_name: linux_audit_db
+
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: linux_audit
+
+    ports:
+      - "5432:5432"
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  audit-target:
+    build:
+      context: .
+      dockerfile: Dockerfile.audit
+
+    container_name: audit_target
+
+    ports:
+      - "2222:22"
+
+volumes:
+  postgres_data:
