@@ -1,4 +1,4 @@
-# AI-Powered Linux Hardening Assistant (Monorepo)
+# AI-Powered Linux Hardening Assistant
 
 An automated security auditing and configuration hardening recommendation system for remote Linux servers. The application connects to remote servers via SSH, runs standard security audit commands, aggregates the outputs, feeds the aggregated report to Google Gemini API for intelligent severity classification and mitigation scripts generation, saves results in a PostgreSQL database, and displays them on a premium cyber-security themed React dashboard.
 
