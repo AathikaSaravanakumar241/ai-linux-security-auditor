@@ -24,6 +24,8 @@ from app.schemas.audit_schemas import (
     AuditSummaryResponse,
     SeverityBreakdown,
     FindingResponse,
+    AuditComparisonResponse,
+    ComparisonFinding,
 )
 
 router = APIRouter(prefix="/api", tags=["Audit"])
@@ -239,6 +241,115 @@ def get_audit(
             error=ErrorDetail(
                 code="DATABASE_QUERY_ERROR",
                 message=f"Failed to fetch audit details: {str(exc)}",
+                details=repr(exc),
+            ),
+        )
+
+
+@router.get(
+    "/audits/{audit_id}/comparison",
+    response_model=StandardResponse,
+    summary="Compare an audit with the previous audit for the same server",
+)
+def compare_audit(
+    audit_id: UUID,
+    db: Session = Depends(get_db),
+    db_service: DatabaseService = Depends(get_database_service),
+):
+    """
+    Compares the current audit findings against the previous audit run for the same server IP.
+    """
+    try:
+        current_audit = db_service.get_audit_details(db, audit_id)
+        if not current_audit:
+            return StandardResponse(
+                success=False,
+                data=None,
+                error=ErrorDetail(
+                    code="AUDIT_NOT_FOUND",
+                    message=f"Audit with ID {audit_id} was not found.",
+                ),
+            )
+
+        previous_audit = db_service.get_previous_audit(
+            db,
+            server_ip=current_audit.server_ip,
+            current_date=current_audit.audit_date,
+        )
+
+        if not previous_audit:
+            # No previous audit, return successfully with data=None or empty comparison
+            return StandardResponse(
+                success=True,
+                data=None,
+                error=None,
+            )
+
+        # Normalize issue strings for reliable matching
+        def normalize_issue(issue_name: str) -> str:
+            return issue_name.strip().lower()
+
+        prev_map = {normalize_issue(f.issue): f for f in previous_audit.findings}
+        curr_map = {normalize_issue(f.issue): f for f in current_audit.findings}
+
+        resolved_findings = []
+        remaining_findings = []
+        new_findings = []
+
+        # Find resolved (in previous, not in current)
+        for norm_issue, f in prev_map.items():
+            if norm_issue not in curr_map:
+                resolved_findings.append(
+                    ComparisonFinding(
+                        issue=f.issue,
+                        severity=f.severity,
+                        explanation=f.explanation,
+                        fix_command=f.fix_command,
+                    )
+                )
+
+        # Find remaining (in both) and new (in current, not in previous)
+        for norm_issue, f in curr_map.items():
+            if norm_issue in prev_map:
+                remaining_findings.append(
+                    ComparisonFinding(
+                        issue=f.issue,
+                        severity=f.severity,
+                        explanation=f.explanation,
+                        fix_command=f.fix_command,
+                    )
+                )
+            else:
+                new_findings.append(
+                    ComparisonFinding(
+                        issue=f.issue,
+                        severity=f.severity,
+                        explanation=f.explanation,
+                        fix_command=f.fix_command,
+                    )
+                )
+
+        comparison = AuditComparisonResponse(
+            previous_audit_id=previous_audit.id,
+            previous_audit_date=previous_audit.audit_date,
+            resolved=resolved_findings,
+            remaining=remaining_findings,
+            new=new_findings,
+        )
+
+        return StandardResponse(
+            success=True,
+            data=comparison.model_dump(mode="json"),
+            error=None,
+        )
+
+    except Exception as exc:
+        return StandardResponse(
+            success=False,
+            data=None,
+            error=ErrorDetail(
+                code="DATABASE_QUERY_ERROR",
+                message=f"Failed to generate audit comparison: {str(exc)}",
                 details=repr(exc),
             ),
         )

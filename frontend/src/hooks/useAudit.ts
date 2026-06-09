@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
-import { runAudit as apiRunAudit, getAudits as apiGetAudits, getAuditById as apiGetAuditById } from '../api/audits';
-import { AuditRequest, AuditSummary, AuditDetail } from '../types';
+import { runAudit as apiRunAudit, getAudits as apiGetAudits, getAuditById as apiGetAuditById, getAuditComparison as apiGetAuditComparison } from '../api/audits';
+import { AuditRequest, AuditSummary, AuditDetail, AuditComparison } from '../types';
 
 export function useAudit() {
   const [loading, setLoading] = useState(false);
@@ -51,7 +51,22 @@ export function useAudit() {
     }
   }, []);
 
-  return { loading, error, runAudit, fetchAudits, fetchAudit };
+  const fetchComparison = useCallback(async (id: string): Promise<AuditComparison | null> => {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await apiGetAuditComparison(id);
+      return result;
+    } catch (err: any) {
+      const errMsg = err.message || 'Failed to retrieve audit comparison.';
+      setError(errMsg);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  return { loading, error, runAudit, fetchAudits, fetchAudit, fetchComparison };
 }
 
 export default useAudit;

@@ -1,5 +1,5 @@
 import apiClient from './client';
-import { AuditDetail, AuditSummary, AuditRequest } from '../types';
+import { AuditDetail, AuditSummary, AuditRequest, AuditComparison } from '../types';
 
 /**
  * Executes a security audit on a remote server.
@@ -24,6 +24,13 @@ export const getAudits = (limit: number = 50, offset: number = 0, serverIp?: str
  */
 export const getAuditById = (auditId: string): Promise<AuditDetail> => {
   return apiClient.get(`/audits/${auditId}`);
+};
+
+/**
+ * Fetches comparison results with the previous audit for the same server.
+ */
+export const getAuditComparison = (auditId: string): Promise<AuditComparison | null> => {
+  return apiClient.get(`/audits/${auditId}/comparison`);
 };
 
 /**

@@ -46,3 +46,19 @@ export interface ApiResponse<T = any> {
   error: ApiError | null;
   timestamp: string;
 }
+
+export interface ComparisonFinding {
+  issue: string;
+  severity: string;
+  explanation?: string;
+  fix_command?: string;
+}
+
+export interface AuditComparison {
+  previous_audit_id: string | null;
+  previous_audit_date: string | null;
+  resolved: ComparisonFinding[];
+  remaining: ComparisonFinding[];
+  new: ComparisonFinding[];
+}
+

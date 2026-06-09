@@ -116,6 +116,26 @@ class DatabaseService:
             logger.warning("Audit with ID %s not found in database.", audit_id)
         return result
 
+    def get_previous_audit(
+        self,
+        db: Session,
+        server_ip: str,
+        current_date: datetime,
+    ) -> Optional[Audit]:
+        """
+        Retrieve the latest audit record for a given IP address executed before current_date.
+        """
+        stmt = (
+            select(Audit)
+            .options(selectinload(Audit.findings))
+            .where(Audit.server_ip == server_ip)
+            .where(Audit.audit_date < current_date)
+            .order_by(Audit.audit_date.desc())
+            .limit(1)
+        )
+        return db.scalars(stmt).first()
+
+
     def search_audits(
         self,
         db: Session,

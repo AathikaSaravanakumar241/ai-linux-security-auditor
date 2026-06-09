@@ -89,9 +89,36 @@ class AuditDetailResponse(BaseModel):
         return v
 
 
+class ComparisonFinding(BaseModel):
+    """Representing a finding in comparison results."""
+
+    issue: str
+    severity: str
+    explanation: Optional[str] = None
+    fix_command: Optional[str] = None
+
+
+class AuditComparisonResponse(BaseModel):
+    """Comparison roadmap showing resolved, remaining, and new findings."""
+
+    previous_audit_id: Optional[UUID] = None
+    previous_audit_date: Optional[datetime] = None
+    resolved: List[ComparisonFinding] = []
+    remaining: List[ComparisonFinding] = []
+    new: List[ComparisonFinding] = []
+
+    @field_validator("previous_audit_date", mode="after")
+    @classmethod
+    def ensure_utc(cls, v: Optional[datetime]) -> Optional[datetime]:
+        if v and v.tzinfo is None:
+            return v.replace(tzinfo=timezone.utc)
+        return v
+
+
 # ---------------------------------------------------------------------------
 # Standard Response Wrapper
 # ---------------------------------------------------------------------------
+
 
 class ErrorDetail(BaseModel):
     """Technical and human-readable details about an API failure."""

@@ -1,26 +1,35 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useAudit } from '../hooks/useAudit';
-import { AuditDetail, Finding } from '../types';
+import { AuditDetail, Finding, AuditComparison } from '../types';
 import ResultsSummary from '../components/dashboard/ResultsSummary';
 import SeverityCard from '../components/dashboard/SeverityCard';
 import FindingsTable from '../components/dashboard/FindingsTable';
 import LoadingSpinner from '../components/common/LoadingSpinner';
+import ResolutionMap from '../components/dashboard/ResolutionMap';
 
 export default function AuditResultsPage() {
   const { id } = useParams<{ id: string }>();
-  const { fetchAudit, loading, error } = useAudit();
+  const { fetchAudit, fetchComparison, loading, error } = useAudit();
   const [auditData, setAuditData] = useState<AuditDetail | null>(null);
+  const [comparisonData, setComparisonData] = useState<AuditComparison | null>(null);
   const [severityFilter, setSeverityFilter] = useState<string | null>(null);
   const [showRawReport, setShowRawReport] = useState<boolean>(false);
 
   useEffect(() => {
     if (id) {
+      setAuditData(null);
+      setComparisonData(null);
       fetchAudit(id)
-        .then((data) => setAuditData(data))
+        .then((data) => {
+          setAuditData(data);
+          fetchComparison(id)
+            .then((comp) => setComparisonData(comp))
+            .catch((err) => console.error('Failed to load comparison:', err));
+        })
         .catch((err) => console.error('Failed to load audit:', err));
     }
-  }, [id, fetchAudit]);
+  }, [id, fetchAudit, fetchComparison]);
 
   const toggleSeverityFilter = (severity: string) => {
     if (severityFilter === severity) {
@@ -103,6 +112,11 @@ export default function AuditResultsPage() {
         totalFindings={auditData.findings.length}
         severityBreakdown={auditData.severity_breakdown}
       />
+
+      {/* Resolution Checklist Map */}
+      {comparisonData && (comparisonData.resolved.length > 0 || comparisonData.remaining.length > 0 || comparisonData.new.length > 0) && (
+        <ResolutionMap comparison={comparisonData} />
+      )}
 
       {/* Severity breakdown filter cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
