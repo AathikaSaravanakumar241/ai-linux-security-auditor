@@ -85,7 +85,7 @@ class AuditOrchestrator:
 
             # Step 2: Execute security commands
             logger.info("Pipeline step 2: Running audit commands...")
-            audit_result = self.audit_service.run_audit(self.ssh_service)
+            audit_result = self.audit_service.run_audit(self.ssh_service, server_ip=host)
             raw_report = audit_result["raw_report"]
 
         finally:
