@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 # AI-Powered Linux Hardening Assistant
+=======
+# AI-Powered Linux Hardening Assistant (Monorepo)
+>>>>>>> 5e6e142abc81f49205d001f54e32bfd3aaeba1b4
 
 An automated security auditing and configuration hardening recommendation system for remote Linux servers. The application connects to remote servers via SSH, runs standard security audit commands, aggregates the outputs, feeds the aggregated report to Google Gemini API for intelligent severity classification and mitigation scripts generation, saves results in a PostgreSQL database, and displays them on a premium cyber-security themed React dashboard.
 
@@ -183,4 +187,8 @@ The security auditor checks the following configurations out-of-the-box:
 7. **Listening Network Ports**: Scans all active TCP/UDP ports.
 8. **World-Writable Files**: Highlights insecure file permissions.
 9. **No-Owner Files**: Identifies files without valid users/groups.
+<<<<<<< HEAD
 10. **Shadow File Permissions**: Validates permissions of `/etc/shadow`.
+=======
+10. **Shadow File Permissions**: Validates permissions of `/etc/shadow`.
+>>>>>>> 5e6e142abc81f49205d001f54e32bfd3aaeba1b4
